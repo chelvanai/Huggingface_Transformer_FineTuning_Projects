@@ -9,4 +9,6 @@ so if you want to configure as your dataset.
 
 >>> python test.py
 
+ >>> model = TFDistilBertForSequenceClassification.from_pretrained('distilbert-base-uncased', num_labels=6) 
  
+ change num_label of your one
