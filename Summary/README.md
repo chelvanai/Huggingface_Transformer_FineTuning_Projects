@@ -4,6 +4,11 @@
 
 After train your weight file will be save in weight folder
 
+**Pre-trained weight**
+
+It is only trained 2 epochs, if you want train more 
+
+
 **Test**
 
 >>> python test.py
