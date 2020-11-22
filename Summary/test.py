@@ -1,85 +1,43 @@
-from transformers import T5Tokenizer, T5ForConditionalGeneration, AutoTokenizer
 import torch
-from torch.utils.data import Dataset, DataLoader
 from torch import cuda
-import pandas as pd
-
-tokenizer = AutoTokenizer.from_pretrained("./weight")
-model = T5ForConditionalGeneration.from_pretrained("./weight")
+from transformers import T5Tokenizer, T5ForConditionalGeneration
 
 device = 'cuda' if cuda.is_available() else 'cpu'
 
-ctext = "The Transformer is a deep learning model introduced in 2017, used primarily in the field of natural " \
-        "language processing. Like recurrent neural networks, Transformers are designed to handle sequential data, " \
-        "such as natural language, for tasks such as translation and text summarization. However, unlike RNNs, " \
-        "Transformers do not require that the sequential data be processed in order. For example, if the input data " \
-        "is a natural language sentence, the Transformer does not need to process the beginning of it before the " \
-        "end. Due to this feature, the Transformer allows for much more parallelization than RNNs and therefore " \
-        "reduced training times. Since their introduction, Transformers have become the model of choice for " \
-        "tackling many problems in NLP, replacing older recurrent neural network models such as the long short-term " \
-        "memory. Since the Transformer model facilitates more parallelization during training, it has enabled " \
-        "training on larger datasets than was possible before it was introduced. "
+tokenizer = T5Tokenizer.from_pretrained("./weight")
+model = T5ForConditionalGeneration.from_pretrained('./weight', return_dict=True)
+model = model.to(device)
 
-VALID_BATCH_SIZE = 2  # input batch size for testing (default: 1000)
+ctext = "I am of course overjoyed to be here today in the role of ceremonial object. There is more than the usual " \
+        "amount of satisfaction in receiving an honorary degree from the university that helped to form one’s " \
+        "erstwhile callow and ignorant mind into the thing of dubious splendor that it is today; whose professors put " \
+        "up with so many overdue term papers, and struggled to read one’s handwriting, of which ‘interesting’ is the " \
+        "best that has been said; at which one failed to learn Anglo-Saxon and somehow missed Bibliography entirely, " \
+        "a severe error which I trust no one present here today has committed; and at which one underwent " \
+        "excruciating agonies not only of soul but of body, later traced to having drunk too much coffee in the " \
+        "bowels of Wymilwood. It is to Victoria College that I can attribute the fact that Bell Canada, " \
+        "Oxford University Press and McClelland and Stewart all failed to hire me in the summer of ‘63, " \
+        "on the grounds that I was a) overqualified and b) couldn’t type, thus producing in me that state of " \
+        "joblessness, angst and cosmic depression which everyone knows is indispensable for novelists and poets, " \
+        "although nobody has ever claimed the same for geologists, dentists or chartered accountants. It is also due " \
+        "to Victoria College, incarnated in the person of Northrop Frye, that I didn’t run away to England to become " \
+        "a waitress, live in a garret, write masterpieces and get tuberculosis. He thought I might have more spare " \
+        "time for creation if I ran away to Boston, lived in a stupor, wrote footnotes and got anxiety attacks, " \
+        "that is, if I went to Graduate School, and he was right. So, for all the benefits conferred upon me by my " \
+        "Alma Mater, where they taught me that the truth would make me free but failed to warn me of the kind of " \
+        "trouble I’d get into by trying to tell it - I remain duly grateful. "
+
 MAX_LEN = 512
 SUMMARY_LEN = 150
 
-data = {'ctext': [ctext]}
+source = tokenizer.batch_encode_plus([ctext], max_length=MAX_LEN, pad_to_max_length=True,
+                                     return_tensors='pt')
 
-val_dataset = pd.DataFrame(data, columns=['ctext'])
-
-print(val_dataset.head())
-
-
-class CustomDataset1(Dataset):
-
-    def __init__(self, dataframe, tokenizer, source_len, summ_len):
-        self.tokenizer = tokenizer
-        self.data = dataframe
-        self.source_len = source_len
-        self.summ_len = summ_len
-        self.ctext = self.data.ctext
-
-    def __len__(self):
-        return len(self.ctext)
-
-    def __getitem__(self, index):
-        ctext = str(self.ctext[index])
-        ctext = ' '.join(ctext.split())
-
-        source = self.tokenizer.batch_encode_plus([ctext], max_length=self.source_len, pad_to_max_length=True,
-                                                  return_tensors='pt')
-
-        source_ids = source['input_ids'].squeeze()
-        source_mask = source['attention_mask'].squeeze()
-
-        return {
-            'source_ids': source_ids.to(dtype=torch.long),
-            'source_mask': source_mask.to(dtype=torch.long),
-
-        }
+ids = source['input_ids'].to(device, dtype=torch.long)
+mask = source['attention_mask'].to(device, dtype=torch.long)
 
 
-val_params = {
-    'batch_size': VALID_BATCH_SIZE,
-    'shuffle': False,
-    'num_workers': 0
-}
-
-val_set = CustomDataset1(val_dataset, tokenizer, MAX_LEN, SUMMARY_LEN)
-val_loader1 = DataLoader(val_set, **val_params)
-
-model.eval()
-
-with torch.no_grad():
-    for _, data in enumerate(val_loader1, 0):
-        ids = data['source_ids'].to(device, dtype=torch.long)
-        mask = data['source_mask'].to(device, dtype=torch.long)
-
-        print(ids.shape)
-        print(mask.shape)
-
-        generated_ids = model.generate(
+generated_ids = model.generate(
             input_ids=ids,
             attention_mask=mask,
             max_length=150,
@@ -89,7 +47,15 @@ with torch.no_grad():
             early_stopping=True
         )
 
-        preds = [tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=True) for g in
+preds = [tokenizer.decode(g, skip_special_tokens=True, clean_up_tokenization_spaces=True) for g in
                  generated_ids]
 
 print(preds)
+
+# generated summary
+"""
+in the role of ceremonial object. It is due to Victoria College, incarnated in Northrop Frye, that I didn’t run 
+away to Boston, live in a stupor, write footnotes and get anxiety attacks, that is, if I went to Graduate School. 
+Notably, Bell Canada, Oxford University Press, McClelland and Stewart all failed to hire me in the summer of ‘63, 
+on the grounds that I was overqualified and couldn’t type.
+"""
